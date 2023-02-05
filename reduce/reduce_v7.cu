@@ -1,4 +1,4 @@
-#include <cuda.h>
+// #include <cuda.h>  // 如果使用nvcc编译，则无需添加该头文件
 #include <stdio.h>
 
 #define FLOAT_SIZE sizeof(float)
@@ -9,14 +9,14 @@ const unsigned int BLOCK_NUM = 1024;
 const unsigned int NUM_PER_BLOCK = N / BLOCK_NUM;  // 一个block要处理的元素数量
 const unsigned int NUM_PER_THREAD = NUM_PER_BLOCK / THREAD_PER_BLOCK;  // 一个thread要处理的元素数量
 
+// shuffle函数可以让同一个warp内的线程互相访问寄存器，利用这一点可以减少访问共享内存的开销
 __device__ float warpReduce(volatile float *sdata, unsigned int tid) {
     float t = sdata[tid];
-     // 假设当前线程号为tid，__shfl_down_sync返回线程号为tid+i的变量t的值（读取寄存器）
-    t += __shfl_down_sync(0xffffffff, t, 16);
-    t += __shfl_down_sync(0xffffffff, t, 8);
-    t += __shfl_down_sync(0xffffffff, t, 4);
-    t += __shfl_down_sync(0xffffffff, t, 2);
-    t += __shfl_down_sync(0xffffffff, t, 1);
+    // 假设当前线程号为tid，__shfl_down_sync返回线程号为tid+i的变量t的值（读取寄存器）
+    #pragma unroll
+    for (unsigned int i = 16; i >= 1; i /= 2) {
+        t += __shfl_down_sync(0xffffffff, t, i);
+    }
     return t;
 }
 
@@ -35,14 +35,15 @@ __global__ void reduce6(float *d_in, float *d_out) {
         sdata[tid] += d_in[j * block_size + i];
     }
     __syncthreads();
-
-    if (tid < 128) sdata[tid] += sdata[tid + 128];
-    __syncthreads();
-
-    if (tid < 64) sdata[tid] += sdata[tid + 64];
-    __syncthreads();
     
-    if (tid < 32) sdata[tid] += sdata[tid + 32];
+    #pragma unroll
+    for (int i = block_size / 2; i > 32; i /= 2) {
+        if (tid < i) sdata[tid] += sdata[tid + i];
+        __syncthreads();
+    }
+    
+    if (tid < 32) 
+        sdata[tid] += sdata[tid + 32];
     __syncwarp();  // 同一个warp内，使用 __syncwarp进行线程同步，比__syncthreads开销更小
 
     float t = warpReduce(sdata, tid);
