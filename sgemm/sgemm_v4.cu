@@ -6,8 +6,8 @@
 const int M = 512;
 const int N = 512;
 const int K = 512;
-const int BLOCK_M = 128;
-const int BLOCK_N = 128;
+const int BLOCK_M = 64;
+const int BLOCK_N = 64;
 const int BLOCK_K = 8;
 const int THREAD_M = 8;
 const int THREAD_N = 8;
@@ -65,7 +65,7 @@ __global__ void sgemm4(int M, int N, int K, float *A, float *B, float *C) {
         #pragma unroll
         for (int i = 0; i < BM; i += a_tile_stride) {
             int ldg_index = i / a_tile_stride * 4;  // 第ldg_index轮
-            FETCH_FLOAT4(ldg_a_reg[ldg_index]) = FETCH_FLOAT4(A[OFFSET(a_tile_row, a_tile_col, K)]);
+            FETCH_FLOAT4(ldg_a_reg[ldg_index]) = FETCH_FLOAT4(A[OFFSET(a_tile_row + i, a_tile_col, K)]);
             // 转置（按行取，按列存）
             s_A[OFFSET(a_tile_col, i + a_tile_row, BM)] = ldg_a_reg[ldg_index];
             s_A[OFFSET(a_tile_col + 1, i + a_tile_row, BM)] = ldg_a_reg[ldg_index + 1];
