@@ -44,28 +44,36 @@ __global__ void sgemm3(int M, int N, int K, float *A, float *B, float *C) {
     C = &C[by * BM * N + bx * BN];
 
     float tmp[TM][TN] = {0.0};
+    #pragma unroll
     for (int k = 0; k < K; k += BK) {
         // global to shared
+        #pragma unroll
         for (int i = 0; i < BM; i += a_tile_stride) {
             s_A[(a_tile_row + i) * BK + a_tile_col] = A[(a_tile_row + i) * K + a_tile_col];
         }
+        #pragma unroll
         for (int i = 0; i < BK; i += b_tile_stride) {
             s_B[(b_tile_row + i) * BN + b_tile_col] = B[(b_tile_row + i) * N + b_tile_col];
         }
         __syncthreads();
 
         // compute
+        #pragma unroll
         for (int i = 0; i < BK; i++) {
             // shared to register
+            #pragma unroll
             for (int r = 0; r < TM; r++) {
                 a_frag[r] = s_A[(ty + r) * BK + i];
             }
+            #pragma unroll
             for (int c = 0; c < TN; c++) {
                 b_frag[c] = s_B[i * BN + (tx + c)];
             }
             
             // real compute
+            #pragma unroll
             for (int r = 0; r < TM; r++) {
+                #pragma unroll
                 for (int c = 0; c < TN; c++) {
                     tmp[r][c] += a_frag[r] * b_frag[c];
                 }
@@ -79,7 +87,9 @@ __global__ void sgemm3(int M, int N, int K, float *A, float *B, float *C) {
     }
 
     // write result to global
+    #pragma unroll
     for (int i = 0; i < TM; i++) {
+        #pragma unroll
         for (int j = 0; j < TN; j++) {
             C[(ty + i) * N + (tx + j)] = tmp[i][j];
         }

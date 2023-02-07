@@ -6,11 +6,11 @@
 const int M = 512;
 const int N = 512;
 const int K = 512;
-const int BLOCK_M = 16;
-const int BLOCK_N = 16;
-const int BLOCK_K = 16;
-const int THREAD_M = 2;
-const int THREAD_N = 2;
+const int BLOCK_M = 128;
+const int BLOCK_N = 128;
+const int BLOCK_K = 8;
+const int THREAD_M = 8;
+const int THREAD_N = 8;
 
 /*
     using float4
@@ -59,8 +59,10 @@ __global__ void sgemm4(int M, int N, int K, float *A, float *B, float *C) {
     C = &C[by * BM * N + bx * BN];
 
     float tmp[TM][TN] = {0.0};
+    #pragma unroll
     for (int k = 0; k < K; k += BK) {
         // global to shared using float4
+        #pragma unroll
         for (int i = 0; i < BM; i += a_tile_stride) {
             int ldg_index = i / a_tile_stride * 4;  // 第ldg_index轮
             FETCH_FLOAT4(ldg_a_reg[ldg_index]) = FETCH_FLOAT4(A[OFFSET(a_tile_row, a_tile_col, K)]);
@@ -70,23 +72,29 @@ __global__ void sgemm4(int M, int N, int K, float *A, float *B, float *C) {
             s_A[OFFSET(a_tile_col + 2, i + a_tile_row, BM)] = ldg_a_reg[ldg_index + 2];
             s_A[OFFSET(a_tile_col + 3, i + a_tile_row, BM)] = ldg_a_reg[ldg_index + 3];
         }
+        #pragma unroll
         for (int i = 0; i < BK; i += b_tile_stride) {
             FETCH_FLOAT4(s_B[OFFSET(b_tile_row + i, b_tile_col, BN)]) = FETCH_FLOAT4(B[OFFSET(b_tile_row + i, b_tile_col, N)]);
         }
         __syncthreads();
 
         // compute
+        #pragma unroll
         for (int i = 0; i < BK; i++) {
             // shared to register using float4
+            #pragma unroll
             for (int r = 0; r < TM; r += 4) {
                 FETCH_FLOAT4(a_frag[r]) = FETCH_FLOAT4(s_A[OFFSET(i, ty + r, BM)]);
             }
+            #pragma unroll
             for (int c = 0; c < TN; c += 4) {
                 FETCH_FLOAT4(b_frag[c]) = FETCH_FLOAT4(s_B[OFFSET(i, tx + c, BN)]);
             }
             
             // real compute
+            #pragma unroll
             for (int r = 0; r < TM; r++) {
+                #pragma unroll
                 for (int c = 0; c < TN; c++) {
                     tmp[r][c] += a_frag[r] * b_frag[c];
                 }
@@ -100,10 +108,11 @@ __global__ void sgemm4(int M, int N, int K, float *A, float *B, float *C) {
     }
 
     // write result to global using float4
-    for (int i = 0; i < TM; i++) {
-        for (int j = 0; j < TN; j += 4) {
-            // C[(ty + i) * N + (tx + j)] = tmp[i][j];
-            FETCH_FLOAT4(C[OFFSET(ty + i, tx + j, N)]) = FETCH_FLOAT4(tmp[i][j]);
+    #pragma unroll
+    for (int r = 0; r < TM; r++) {
+        #pragma unroll
+        for (int c = 0; c < TN; c += 4) {
+            FETCH_FLOAT4(C[OFFSET(ty + r, tx + c, N)]) = FETCH_FLOAT4(tmp[r][c]);
         }
     }
 }

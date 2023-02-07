@@ -36,6 +36,7 @@ __global__ void sgemm1(int M, int N, int K, float *A, float *B, float *C) {
     C = &C[by * BM * N + bx * BN];
 
     float tmp = 0;
+    #pragma unroll
     for (int k = 0; k < K; k += BK) {
         // global to shared
         s_A[ty * BK + tx] = A[ty * K + tx];
@@ -43,6 +44,7 @@ __global__ void sgemm1(int M, int N, int K, float *A, float *B, float *C) {
         __syncthreads();
 
         // compute
+        #pragma unroll
         for (int i = 0; i < BK; i++) {
             tmp += s_A[ty * BK + i] * s_B[i * BN + tx];
         }

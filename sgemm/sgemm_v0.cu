@@ -14,6 +14,7 @@ __global__ void sgemm0(int M, int N, int K, float *A, float *B, float *C) {
     int y = blockDim.y * blockIdx.y + threadIdx.y;
 
     float tmp = 0;
+    #pragma unroll
     for (int i = 0; i < K; i++) {
         tmp += A[y * K + i] * B[i * N + x];
     }
