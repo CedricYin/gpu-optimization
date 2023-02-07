@@ -40,14 +40,14 @@ load_index: 表示数据从哪个空间读出，与 write_index 二进制相反
 而对于 register 的预取，小迭代次数对2取模即可实现，具体为：预取到1，对0读取；预取到0，对1读取 ...
 
 ### prefetch 代码框架
-进行一次预取（预取到buffer0）：global -> shared；shared -> register
-大迭代
-    如果还有下一个迭代，则将下一个迭代的数据块，搬运到寄存器上暂存（这里对A不用转置）
-    BK - 1 次小迭代
-        将下一个小迭代的数据块，搬运到寄存器上
-        计算tile
-    将存储在临时寄存器的数据搬运到shared memory中，完成shared memory的预取
-    完成寄存器的预取
-    将最后一个小迭代完成
-    write_index ^= 1
-写回结果
+- 进行一次预取（预取到buffer0）：global -> shared；shared -> register
+- 大迭代
+- - 如果还有下一个迭代，则将下一个迭代的数据块，搬运到寄存器上暂存（这里对A不用转置）
+- - BK - 1 次小迭代
+- - - 将下一个小迭代的数据块，搬运到寄存器上
+- - - 计算tile
+- - 将存储在临时寄存器的数据搬运到shared memory中，完成shared memory的预取
+- - 完成寄存器的预取
+- - 将最后一个小迭代完成
+- - write_index ^= 1
+- 写回结果
