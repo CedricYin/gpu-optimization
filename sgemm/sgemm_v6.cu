@@ -13,11 +13,27 @@ const int THREAD_M = 8;
 const int THREAD_N = 8;
 
 /*
-    base on v4, add prefetch data by double buffers
+    benchmark of prefetch
+
+    分离了global to shared以及小迭代
+    在gpu中，只有寄存器和global间、寄存器和shared间的指令，所以即使代码写的是global to shared，底层指令中也会经过寄存器进行中转
+    因此，这里显式地分离global to shared，使得增加访存和计算重叠的机会
+    分离小迭代为7+1也是一样的道理，增加访存和计算重叠的机会
+    如此一来，可以隐藏延迟
+
+    所以大迭代的逻辑为：
+        global -> register (中转)
+        BK-1次小迭代
+        register -> shared (预取)
+        最后1次小迭代
+    
+    v5大迭代的逻辑：（这里放出来做对比）
+        BK次小迭代
+        global -> shared (预取。这里底层是global->register->shared)
 */
 
 template<const int BM, const int BN, const int BK, const int TM, const int TN>
-__global__ void sgemm5(int M, int N, int K, float *A, float *B, float *C) {
+__global__ void sgemm6(int M, int N, int K, float *A, float *B, float *C) {
     const int bx = blockIdx.x;
     const int by = blockIdx.y;
     // in this kernel, tx and ty is the left top position of a tile
@@ -35,7 +51,7 @@ __global__ void sgemm5(int M, int N, int K, float *A, float *B, float *C) {
     const int ldg_b_num = BK * BN / move_num;
 
     float ldg_a_reg[4 * ldg_a_num] = {0.0};  // 用于转置s_A，以及暂存A数据
-    // float ldg_b_reg[4 * ldg_b_num] = {0.0};  // 用于暂存B数据
+    float ldg_b_reg[4 * ldg_b_num] = {0.0};  // 用于暂存B数据
 
     // paramters about moving a data block (cause threads is less than beofre, one threads shall move more elements)
     const int a_tile_row = tid / (BK / 4);
@@ -91,10 +107,24 @@ __global__ void sgemm5(int M, int N, int K, float *A, float *B, float *C) {
     do {
         k += BK;
         read_index = write_index ^ 1;
+        
+        // 如果还有下一个迭代，则将下一个迭代的数据块，搬运到寄存器上暂存（这里对A不用转置）
+        if (k < K) {
+            #pragma unroll
+            for (int i = 0; i < BM; i += a_tile_stride) {
+                int ldg_index = i / a_tile_stride * 4;  // 第ldg_index轮
+                FETCH_FLOAT4(ldg_a_reg[ldg_index]) = FETCH_FLOAT4(A[OFFSET(a_tile_row + i, k + a_tile_col, K)]);
+            }
+            #pragma unroll
+            for (int i = 0; i < BK; i += b_tile_stride) {
+                int ldg_index = i / b_tile_stride * 4;  // 第ldg_index轮
+                FETCH_FLOAT4(ldg_b_reg[ldg_index]) = FETCH_FLOAT4(B[OFFSET(k + b_tile_row + i, b_tile_col, N)]);
+            }
+        }
 
-        // BK 次小迭代
+        // BK -1 次小迭代
         #pragma unroll
-        for (int i = 0; i < BK; i++) {
+        for (int i = 0; i < BK - 1; i++) {
             // 将下一个小迭代的数据块，搬运到寄存器上
             #pragma unroll
             for (int r = 0; r < TM; r += 4) {
@@ -117,11 +147,10 @@ __global__ void sgemm5(int M, int N, int K, float *A, float *B, float *C) {
 
         // prefetch
         if (k < K) {
+            // 将存储在临时寄存器的数据搬运到shared memory中，完成shared memory的预取
             #pragma unroll
             for (int i = 0; i < BM; i += a_tile_stride) {
-                int ldg_index = i / a_tile_stride * 4;  // 第ldg_index轮
-                FETCH_FLOAT4(ldg_a_reg[ldg_index]) = FETCH_FLOAT4(A[OFFSET(a_tile_row + i, k + a_tile_col, K)]);
-                // 转置（按行取，按列存）
+                int ldg_index = i / a_tile_stride * 4;
                 s_A[write_index][OFFSET(a_tile_col, i + a_tile_row, BM)] = ldg_a_reg[ldg_index];
                 s_A[write_index][OFFSET(a_tile_col + 1, i + a_tile_row, BM)] = ldg_a_reg[ldg_index + 1];
                 s_A[write_index][OFFSET(a_tile_col + 2, i + a_tile_row, BM)] = ldg_a_reg[ldg_index + 2];
@@ -129,7 +158,8 @@ __global__ void sgemm5(int M, int N, int K, float *A, float *B, float *C) {
             }
             #pragma unroll
             for (int i = 0; i < BK; i += b_tile_stride) {
-                FETCH_FLOAT4(s_B[write_index][OFFSET(b_tile_row + i, b_tile_col, BN)]) = FETCH_FLOAT4(B[OFFSET(k + b_tile_row + i, b_tile_col, N)]);
+                int ldg_index = i / b_tile_stride * 4;
+                FETCH_FLOAT4(s_B[write_index][OFFSET(b_tile_row + i, b_tile_col, BN)]) = FETCH_FLOAT4(ldg_b_reg[ldg_index]);
             }
             // use double buffer, only need one sync
             __syncthreads();
@@ -142,6 +172,15 @@ __global__ void sgemm5(int M, int N, int K, float *A, float *B, float *C) {
             #pragma unroll
             for (int c = 0; c < TN; c += 4) {
                 FETCH_FLOAT4(b_frag[0][c]) = FETCH_FLOAT4(s_B[write_index][OFFSET(0, tx + c, BN)]);
+            }
+        }
+
+        // 将最后一个小迭代完成
+        #pragma unroll
+        for (int r = 0; r < TM; r++) {
+            #pragma unroll
+            for (int c = 0; c < TN; c++) {
+                tmp[r][c] += a_frag[(BK - 1) % 2][r] * b_frag[(BK - 1) % 2][c];
             }
         }
 
@@ -207,7 +246,7 @@ int main() {
     cudaMemcpy(d_B, B, sizeof(float) * K * N, cudaMemcpyHostToDevice);
     dim3 block(BLOCK_N / THREAD_N, BLOCK_M / THREAD_M);  
     dim3 grid(N / BLOCK_N, M / BLOCK_M);
-    sgemm5<BLOCK_M, BLOCK_N, BLOCK_K, THREAD_M, THREAD_N><<<grid, block>>>(M, N, K, d_A, d_B, d_C);
+    sgemm6<BLOCK_M, BLOCK_N, BLOCK_K, THREAD_M, THREAD_N><<<grid, block>>>(M, N, K, d_A, d_B, d_C);
     cudaMemcpy(C, d_C, sizeof(float) * M * N, cudaMemcpyDeviceToHost);
 
     check(C, C_base);

@@ -76,7 +76,7 @@ __global__ void sgemm4(int M, int N, int K, float *A, float *B, float *C) {
         for (int i = 0; i < BK; i += b_tile_stride) {
             FETCH_FLOAT4(s_B[OFFSET(b_tile_row + i, b_tile_col, BN)]) = FETCH_FLOAT4(B[OFFSET(b_tile_row + i, b_tile_col, N)]);
         }
-        __syncthreads();
+        __syncthreads();  // 防止线程读取到脏值
 
         // compute
         #pragma unroll
@@ -100,7 +100,7 @@ __global__ void sgemm4(int M, int N, int K, float *A, float *B, float *C) {
                 }
             }
         }
-        __syncthreads();
+        __syncthreads();  // 防止线程p还没计算完成，线程q已经计算完成且进入下一次大迭代时，执行global to shared时把线程p读取的shared部分覆盖了
 
         // move pointer for next compute
         A += BK;

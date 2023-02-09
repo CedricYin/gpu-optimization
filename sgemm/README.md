@@ -13,9 +13,15 @@ using register frag
 
 ## sgemm_v4
 using float4
+引入 float4 后，block的宽和高限制为 4 的倍数
 
 ## sgemm_v5
 using data prefetch
+
+## sgemm_v6
+增加访存和计算重叠的机会，尽可能地掩盖访存延迟，具体思路如下：
+显式地分阶段访存：global -> register -> shared
+分阶段迭代：7 + 1
 
 
 # 思路
