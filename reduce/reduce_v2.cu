@@ -5,10 +5,11 @@
 
 const unsigned int THREAD_PER_BLOCK = 256;
 const unsigned int N = 32 * 1024 * 1024;
-const unsigned int NUM_PER_BLOCK = THREAD_PER_BLOCK;  // 每个block要处理的元素数量 = 每个block的线程数
+const unsigned int NUM_PER_BLOCK = THREAD_PER_BLOCK; // 每个block要处理的元素数量 = 每个block的线程数
 const unsigned int BLOCK_NUM = N / NUM_PER_BLOCK;
 
-__global__ void reduce2(float *d_in, float *d_out) {
+__global__ void reduce2(float *d_in, float *d_out)
+{
     __shared__ float sdata[THREAD_PER_BLOCK];
     unsigned int tid = threadIdx.x;
     unsigned int i = threadIdx.x + blockDim.x * blockIdx.x;
@@ -31,8 +32,10 @@ __global__ void reduce2(float *d_in, float *d_out) {
 
         但有个问题，每轮的工作线程都减半，其余线程阻塞在 __syncthreads()，导致线程的浪费
     */
-    for (unsigned int s = blockDim.x / 2; s > 0; s /= 2) {
-        if (tid < s) {
+    for (unsigned int s = blockDim.x / 2; s > 0; s /= 2)
+    {
+        if (tid < s)
+        {
             sdata[tid] += sdata[tid + s];
         }
         __syncthreads();
@@ -42,30 +45,37 @@ __global__ void reduce2(float *d_in, float *d_out) {
         d_out[blockIdx.x] = sdata[tid];
 }
 
-void check(float *out, float *res, int n) {
-    for (int i = 0; i < n; i++) {
-        if (out[i] != res[i]) {
+void check(float *out, float *res, int n)
+{
+    for (int i = 0; i < n; i++)
+    {
+        if (out[i] != res[i])
+        {
             puts("the result is wrong");
-            return ;
+            return;
         }
     }
     puts("the result is true");
 }
 
-int main() {
+int main()
+{
     float *in, *out, *d_in, *d_out, *res;
-    in = (float*)malloc(N * FLOAT_SIZE);
-    out = (float*)malloc(BLOCK_NUM * FLOAT_SIZE);
-    cudaMalloc((void**)&d_in, N * FLOAT_SIZE);
-    cudaMalloc((void**)&d_out, BLOCK_NUM * FLOAT_SIZE);
-    for (int i = 0; i < N; i++) {
+    in = (float *)malloc(N * FLOAT_SIZE);
+    out = (float *)malloc(BLOCK_NUM * FLOAT_SIZE);
+    cudaMalloc((void **)&d_in, N * FLOAT_SIZE);
+    cudaMalloc((void **)&d_out, BLOCK_NUM * FLOAT_SIZE);
+    for (int i = 0; i < N; i++)
+    {
         in[i] = 1;
     }
 
-    res = (float*)malloc(BLOCK_NUM * FLOAT_SIZE);
-    for (int i = 0; i < BLOCK_NUM; i++) {
+    res = (float *)malloc(BLOCK_NUM * FLOAT_SIZE);
+    for (int i = 0; i < BLOCK_NUM; i++)
+    {
         float cur = 0;
-        for (int j = 0; j < NUM_PER_BLOCK; j++) {
+        for (int j = 0; j < NUM_PER_BLOCK; j++)
+        {
             if (i * NUM_PER_BLOCK + j < N)
                 cur += in[i * NUM_PER_BLOCK + j];
         }
@@ -77,7 +87,7 @@ int main() {
     dim3 grid(BLOCK_NUM);
     dim3 block(THREAD_PER_BLOCK);
     reduce2<<<grid, block>>>(d_in, d_out);
-    
+
     cudaMemcpy(out, d_out, BLOCK_NUM * FLOAT_SIZE, cudaMemcpyDeviceToHost);
 
     check(out, res, BLOCK_NUM);

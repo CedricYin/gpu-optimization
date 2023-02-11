@@ -9,7 +9,7 @@ const int BLOCK_K = 16;
 
 /*
     using shared
-    
+
     一个线程计算一个C的元素
     使用共享内存，减少对全局内存的访问次数
     global访存次数：(K / bk) * (bm * bk + bk * bn) * (M / bm) * (N / bn)，为原来的 1/2 * (1 / BN + 1 / BM)
@@ -20,8 +20,9 @@ const int BLOCK_K = 16;
     共享内存比global访问速度快，因此性能得到提升
     计算访存比：还是1/2
 */
-template<const int BM, const int BN, const int BK>
-__global__ void sgemm1(int M, int N, int K, float *A, float *B, float *C) {
+template <const int BM, const int BN, const int BK>
+__global__ void sgemm1(int M, int N, int K, float *A, float *B, float *C)
+{
     const int bx = blockIdx.x;
     const int by = blockIdx.y;
     const int tx = threadIdx.x;
@@ -36,16 +37,18 @@ __global__ void sgemm1(int M, int N, int K, float *A, float *B, float *C) {
     C = &C[by * BM * N + bx * BN];
 
     float tmp = 0;
-    #pragma unroll
-    for (int k = 0; k < K; k += BK) {
+#pragma unroll
+    for (int k = 0; k < K; k += BK)
+    {
         // global to shared
         s_A[ty * BK + tx] = A[ty * K + tx];
         s_B[ty * BN + tx] = B[ty * N + tx];
         __syncthreads();
 
-        // compute
-        #pragma unroll
-        for (int i = 0; i < BK; i++) {
+// compute
+#pragma unroll
+        for (int i = 0; i < BK; i++)
+        {
             tmp += s_A[ty * BK + i] * s_B[i * BN + tx];
         }
         __syncthreads();
@@ -59,53 +62,58 @@ __global__ void sgemm1(int M, int N, int K, float *A, float *B, float *C) {
     C[ty * N + tx] = tmp;
 }
 
-void init(float *A, float *B, float *C) {
+void init(float *A, float *B, float *C)
+{
     for (int i = 0; i < M; i++)
         for (int j = 0; j < K; j++)
             A[i * K + j] = 1.0 * (i + j);
-    
+
     for (int i = 0; i < K; i++)
         for (int j = 0; j < N; j++)
             B[i * N + j] = 1.0 * (i + j);
-    
+
     for (int i = 0; i < M; i++)
-        for (int j = 0; j < N; j++) {
+        for (int j = 0; j < N; j++)
+        {
             float tmp = 0;
             for (int k = 0; k < K; k++)
                 tmp += A[i * K + k] * B[k * N + j];
             C[i * N + j] = tmp;
         }
-
 }
 
-void check(float *A, float *B) {
+void check(float *A, float *B)
+{
     double diff = 0.0;
-    for (int i = 0; i < M * N; i++) {
+    for (int i = 0; i < M * N; i++)
+    {
         diff = fabs((double)A[i] - B[i]);
-        if (diff > 1e-2) {
+        if (diff > 1e-2)
+        {
             printf("Ai: %lf; Bi: %lf\n", A[i], B[i]);
             puts("wrong");
-            return ;
+            return;
         }
     }
     puts("right");
 }
 
-int main() {
-    float *A = (float*)malloc(sizeof(float) * M * K);
-    float *B = (float*)malloc(sizeof(float) * K * N);
-    float *C = (float*)malloc(sizeof(float) * M * N);
-    float *C_base = (float*)malloc(sizeof(float) * M * N);
+int main()
+{
+    float *A = (float *)malloc(sizeof(float) * M * K);
+    float *B = (float *)malloc(sizeof(float) * K * N);
+    float *C = (float *)malloc(sizeof(float) * M * N);
+    float *C_base = (float *)malloc(sizeof(float) * M * N);
     float *d_A, *d_B, *d_C;
-    cudaMalloc((void**)&d_A, sizeof(float) * M * K);
-    cudaMalloc((void**)&d_B, sizeof(float) * K * N);
-    cudaMalloc((void**)&d_C, sizeof(float) * M * N);
+    cudaMalloc((void **)&d_A, sizeof(float) * M * K);
+    cudaMalloc((void **)&d_B, sizeof(float) * K * N);
+    cudaMalloc((void **)&d_C, sizeof(float) * M * N);
 
     init(A, B, C_base);
 
     cudaMemcpy(d_A, A, sizeof(float) * M * K, cudaMemcpyHostToDevice);
     cudaMemcpy(d_B, B, sizeof(float) * K * N, cudaMemcpyHostToDevice);
-    dim3 block(BLOCK_N, BLOCK_M);  
+    dim3 block(BLOCK_N, BLOCK_M);
     dim3 grid(N / BLOCK_N, M / BLOCK_M);
     sgemm1<BLOCK_M, BLOCK_N, BLOCK_K><<<grid, block>>>(M, N, K, d_A, d_B, d_C);
     cudaMemcpy(C, d_C, sizeof(float) * M * N, cudaMemcpyDeviceToHost);
