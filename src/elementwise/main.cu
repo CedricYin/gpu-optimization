@@ -1,9 +1,7 @@
 #include "utils.cuh"
 #include "kernel.cuh"
 #include "common.cuh"
-
-#define SIZE 1024 * 1024 * 50
-#define BLOCK_SIZE 256
+#include "config.cuh"
 
 int main(int argc, char **argv)
 {
@@ -14,7 +12,6 @@ int main(int argc, char **argv)
     }
     int kernel_id = atoi(argv[1]);
 
-    float *h_A, *h_B, *h_C, *d_A, *d_B, *d_C, *C;
     h_A = (float *)malloc(sizeof(float) * SIZE);
     h_B = (float *)malloc(sizeof(float) * SIZE);
     h_C = (float *)malloc(sizeof(float) * SIZE);
@@ -28,21 +25,21 @@ int main(int argc, char **argv)
     CHECK(cudaMemcpy(d_A, h_A, sizeof(float) * SIZE, cudaMemcpyHostToDevice));
     CHECK(cudaMemcpy(d_B, h_B, sizeof(float) * SIZE, cudaMemcpyHostToDevice));
 
-    float t_ave = 0;
-    dim3 block0(BLOCK_SIZE);
-    dim3 grid0((SIZE + BLOCK_SIZE - 1) / BLOCK_SIZE);
-    dim3 block1(BLOCK_SIZE);
-    dim3 grid1((SIZE + BLOCK_SIZE - 1) / BLOCK_SIZE / 4);
     switch (kernel_id)
     {
     case 0:
         puts("running kernel elementwise_v0 ...");
-        TIMING(100, elementwise0, grid0, block0, t_ave, d_A, d_B, d_C, SIZE);
+        TIMING(NUM_REPEATS, elementwise0, grid0, block0, t_ave, d_A, d_B, d_C, SIZE);
         printf("Effective Bandwidth = %g GB/s\n", SIZE * 4 * 3 / t_ave / 1e6);
         break;
     case 1:
         puts("running kernel elementwise_v1 ...");
-        TIMING(100, elementwise1, grid1, block1, t_ave, d_A, d_B, d_C, SIZE);
+        TIMING(NUM_REPEATS, elementwise1, grid1, block1, t_ave, d_A, d_B, d_C, SIZE);
+        printf("Effective Bandwidth = %g GB/s\n", SIZE * 4 * 3 / t_ave / 1e6);
+        break;
+    case 2:
+        puts("running kernel elementwise_v2 ...");
+        TIMING(NUM_REPEATS, elementwise2, grid2, block2, t_ave, d_A, d_B, d_C, SIZE);
         printf("Effective Bandwidth = %g GB/s\n", SIZE * 4 * 3 / t_ave / 1e6);
         break;
     default:
