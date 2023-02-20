@@ -3,7 +3,7 @@ project(sgemm LANGUAGES CUDA)
 
 file(GLOB CUDA_FILES *.cu)
 
-include_directories(${CMAKE_SOURCE_DIR}/../include)
+include_directories(${CMAKE_SOURCE_DIR}/../../include)
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
 foreach(SOURCE_FILE ${CUDA_FILES})

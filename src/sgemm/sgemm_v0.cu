@@ -35,7 +35,8 @@ int main()
     cudaMemcpy(d_B, B, sizeof(float) * K * N, cudaMemcpyHostToDevice);
     dim3 block(BLOCK_N, BLOCK_M); // 注意：一个block最多有1024个线程，定义dim时，按顺序书写一维x，二维y，三维z ...
     dim3 grid((N + BLOCK_N - 1) / BLOCK_N, (M + BLOCK_M - 1) / BLOCK_M);
-    TIMING(10, sgemm0, grid, block, M, N, K, d_A, d_B, d_C);
+    float t_ave = 0.0;
+    TIMING(t_ave, 10, sgemm0, grid, block, M, N, K, d_A, d_B, d_C);
     cudaMemcpy(C, d_C, sizeof(float) * M * N, cudaMemcpyDeviceToHost);
 
     check_ans(C, C_base);
