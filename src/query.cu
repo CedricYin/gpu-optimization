@@ -1,4 +1,4 @@
-#include "utils.cuh"
+#include "../include/utils.cuh"
 
 int main(int argc, char *argv[])
 {

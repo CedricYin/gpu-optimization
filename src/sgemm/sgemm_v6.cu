@@ -1,9 +1,16 @@
 #include <stdio.h>
-#include "utils.cuh"
-#include "common.cuh"
 
 #define OFFSET(row, col, ld) ((row)*ld + col)
 #define FETCH_FLOAT4(pointer) (reinterpret_cast<float4 *>(&(pointer))[0])
+
+const int M = 512;
+const int N = 512;
+const int K = 512;
+const int BLOCK_M = 32; // v0 v1 要注意，1 个 block 不能超过 1024 个线程
+const int BLOCK_N = 32;
+const int BLOCK_K = 8;
+const int THREAD_M = 8;
+const int THREAD_N = 8;
 
 /*
     benchmark of prefetch
@@ -214,6 +221,42 @@ __global__ void sgemm6(int M, int N, int K, float *A, float *B, float *C)
     }
 }
 
+void init(float *A, float *B, float *C)
+{
+    for (int i = 0; i < M; i++)
+        for (int j = 0; j < K; j++)
+            A[i * K + j] = 1.0 * (i + j);
+
+    for (int i = 0; i < K; i++)
+        for (int j = 0; j < N; j++)
+            B[i * N + j] = 1.0 * (i + j);
+
+    for (int i = 0; i < M; i++)
+        for (int j = 0; j < N; j++)
+        {
+            float tmp = 0;
+            for (int k = 0; k < K; k++)
+                tmp += A[i * K + k] * B[k * N + j];
+            C[i * N + j] = tmp;
+        }
+}
+
+void check(float *A, float *B)
+{
+    double diff = 0.0;
+    for (int i = 0; i < M * N; i++)
+    {
+        diff = fabs((double)A[i] - B[i]);
+        if (diff > 1e-2)
+        {
+            printf("Ai: %lf; Bi: %lf\n", A[i], B[i]);
+            puts("wrong");
+            return;
+        }
+    }
+    puts("right");
+}
+
 int main()
 {
     float *A = (float *)malloc(sizeof(float) * M * K);
@@ -234,7 +277,7 @@ int main()
     sgemm6<BLOCK_M, BLOCK_N, BLOCK_K, THREAD_M, THREAD_N><<<grid, block>>>(M, N, K, d_A, d_B, d_C);
     cudaMemcpy(C, d_C, sizeof(float) * M * N, cudaMemcpyDeviceToHost);
 
-    check_ans(C, C_base);
+    check(C, C_base);
 
     free(A);
     free(B);

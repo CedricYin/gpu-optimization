@@ -29,18 +29,15 @@ int main(int argc, char **argv)
     {
     case 0:
         puts("running kernel elementwise_v0 ...");
-        TIMING(NUM_REPEATS, elementwise0, grid0, block0, t_ave, d_A, d_B, d_C, SIZE);
-        printf("Effective Bandwidth = %g GB/s\n", SIZE * 4 * 3 / t_ave / 1e6);
+        TIMING(0, NUM_REPEATS, elementwise0, grid0, block0, t_ave, -1, -1, -1, -1, -1, d_A, d_B, d_C, SIZE);
         break;
     case 1:
         puts("running kernel elementwise_v1 ...");
-        TIMING(NUM_REPEATS, elementwise1, grid1, block1, t_ave, d_A, d_B, d_C, SIZE);
-        printf("Effective Bandwidth = %g GB/s\n", SIZE * 4 * 3 / t_ave / 1e6);
+        TIMING(0, NUM_REPEATS, elementwise1, grid1, block1, t_ave, -1, -1, -1, -1, -1, d_A, d_B, d_C, SIZE);
         break;
     case 2:
         puts("running kernel elementwise_v2 ...");
-        TIMING(NUM_REPEATS, elementwise2, grid2, block2, t_ave, d_A, d_B, d_C, SIZE);
-        printf("Effective Bandwidth = %g GB/s\n", SIZE * 4 * 3 / t_ave / 1e6);
+        TIMING(0, NUM_REPEATS, elementwise2, grid2, block2, t_ave, -1, -1, -1, -1, -1, d_A, d_B, d_C, SIZE);
         break;
     default:
         break;

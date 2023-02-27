@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.12)
 project(sgemm LANGUAGES CUDA)
 
+add_compile_options(-std=c++14)
+add_compile_options(-arch=sm_86)
+
 file(GLOB CUDA_FILES *.cu)
 
 include_directories(${CMAKE_SOURCE_DIR}/../../include)
